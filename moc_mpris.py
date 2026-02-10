@@ -41,8 +41,9 @@ class Mocp(dbus.service.Object):
     current_time = 0
 
     connected = False
-    
-    
+
+    _album_art_cache = {}
+
     def __init__(self, *args, **kwargs):
         
         remote = kwargs.get('remote', None)
@@ -246,7 +247,10 @@ class Mocp(dbus.service.Object):
             print('%s.Seek not allowed', PLAYER_IFACE)
             return
         offset_in_seconds = int(microseconds / 1000000)
+        current_sec = int(self.get_mocp_info('CurrentSec', 0))
+        new_sec = max(0, current_sec + offset_in_seconds)
         self.mocp_cmd(['--seek', '{:+d}'.format(offset_in_seconds)])
+        self.Seeked(dbus.Int64(new_sec * 1000000))
 
     @dbus.service.method(dbus_interface=PLAYER_IFACE)
     def SetPosition(self, track_id, microseconds):
@@ -256,6 +260,7 @@ class Mocp(dbus.service.Object):
             return
         position_in_seconds = microseconds / 1000. / 1000.
         self.mocp_cmd(['--jump', str(int(position_in_seconds))+'s'])
+        self.Seeked(dbus.Int64(microseconds))
         
     # --- Player interface signals
 
@@ -325,16 +330,24 @@ class Mocp(dbus.service.Object):
             self.core.tracklist.random = False
             
     def get_AlbumArt(self, artist, album):
+        cache_key = (artist, album)
+        if cache_key in self._album_art_cache:
+            return self._album_art_cache[cache_key]
         try:
             result = musicbrainzngs.search_releases(artist=artist, release=album, limit=5)
         except Exception as e:
+            self._album_art_cache[cache_key] = ''
             return ''
         for r in result['release-list']:
             try:
                 data = musicbrainzngs.get_image_list(r['id'])
-                return data['images'][0]['image']
+                url = data['images'][0]['image']
+                self._album_art_cache[cache_key] = url
+                return url
             except Exception as e:
                 continue
+        self._album_art_cache[cache_key] = ''
+        return ''
 
     def get_Metadata(self):
         
@@ -424,6 +437,10 @@ class Mocp(dbus.service.Object):
                 if key in self.oldinfo.keys():
                     if self.oldinfo[key] == getters[key]:
                         del ret[key]
+
+            # Per MPRIS spec, Position must not be emitted via PropertiesChanged.
+            # Clients poll it via Get() or react to the Seeked signal.
+            ret.pop('Position', None)
 
             if len(ret.keys()) > 0:
                 self.PropertiesChanged(interface, ret, [])
