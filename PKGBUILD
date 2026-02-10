@@ -1,5 +1,5 @@
 pkgname=moc-mpris-git
-pkgver=r9.c72d145
+pkgver=r15.c72d145
 pkgrel=1
 pkgdesc="MPRIS2 bridge for MOC (Music on Console)"
 arch=('any')

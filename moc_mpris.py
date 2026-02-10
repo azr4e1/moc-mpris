@@ -70,10 +70,14 @@ class Mocp(dbus.service.Object):
         self.oldinfo = {}
 
     def run(self):
-        
+
         self.current_time = time.time()
-        
+        GLib.timeout_add_seconds(1, self._poll)
         self.loop.run()
+
+    def _poll(self):
+        self.mocp_update(PLAYER_IFACE, skipPosition=True)
+        return True
         
     def _get_root_iface_properties(self):
         return {
@@ -123,11 +127,6 @@ class Mocp(dbus.service.Object):
         print(
             '%s.Get(%s, %s) called',
             dbus.PROPERTIES_IFACE, repr(interface), repr(prop))
-    
-        if int(self.current_time) < int(time.time()):
-            if prop in ['Position']:
-                self.mocp_update(PLAYER_IFACE, skipPosition=True)
-            self.current_time = time.time()
     
         (getter, _) = self.properties[interface][prop]
         if callable(getter):
@@ -246,8 +245,8 @@ class Mocp(dbus.service.Object):
         if not self.get_CanSeek():
             print('%s.Seek not allowed', PLAYER_IFACE)
             return
-        offset_in_seconds = microseconds / 1000. / 1000.
-        self.mocp_cmd(['--seek', offset_in_seconds])
+        offset_in_seconds = int(microseconds / 1000000)
+        self.mocp_cmd(['--seek', '{:+d}'.format(offset_in_seconds)])
 
     @dbus.service.method(dbus_interface=PLAYER_IFACE)
     def SetPosition(self, track_id, microseconds):
@@ -410,9 +409,9 @@ class Mocp(dbus.service.Object):
         return True
     
     def mocp_update(self, interface, skipPosition=False):
-        
+
         if not self.update_mocp_info():
-            sys.exit(0)
+            return
         
         getters = {}
         
@@ -432,7 +431,7 @@ class Mocp(dbus.service.Object):
                         del ret[key]
         
             if skipPosition:
-                del ret['Position']
+                ret.pop('Position', None)
         
             if len(ret.keys()) > 0:
                 self.PropertiesChanged(interface, ret, [])
@@ -456,13 +455,10 @@ class Mocp(dbus.service.Object):
                     continue
                 self.mocp_info[key] = val
                 
-            if not 'State' in self.mocp_info.keys() or self.mocp_info['State'] == 'STOP':
-                return False
-            
             return True
-                
+
         except CalledProcessError as e:
-            return True
+            return False
     
     def get_mocp_info(self, reg, default=None):
         if reg in self.mocp_info.keys():
