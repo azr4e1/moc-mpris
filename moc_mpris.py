@@ -30,8 +30,10 @@ PLAYLISTS_IFACE = 'org.mpris.MediaPlayer2.Playlists'
 musicbrainzngs.set_useragent("MOCP MPRIS bridge", "0.1", "http://github.com/progwolff/moc-mpris")
 
 class Mocp(dbus.service.Object):
-    
-    
+
+    def __repr__(self):
+        return '<Mocp ({})>'.format(getattr(self, 'remote_name', 'initializing'))
+
     properties = None
     
     mocp_info = {}
