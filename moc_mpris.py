@@ -76,7 +76,7 @@ class Mocp(dbus.service.Object):
         self.loop.run()
 
     def _poll(self):
-        self.mocp_update(PLAYER_IFACE, skipPosition=True)
+        self.mocp_update(PLAYER_IFACE)
         return True
         
     def _get_root_iface_properties(self):
@@ -339,8 +339,8 @@ class Mocp(dbus.service.Object):
     def get_Metadata(self):
         
         metadata = {}
-        metadata['mpris:trackid'] = '/org/moc_mpris/track/1'
-        metadata['mpris:length'] = int(self.get_mocp_info("TotalSec", 0))*1000000
+        metadata['mpris:trackid'] = dbus.ObjectPath('/org/moc_mpris/track/1')
+        metadata['mpris:length'] = dbus.Int64(int(self.get_mocp_info("TotalSec", 0)) * 1000000)
         metadata['xesam:url'] = self.get_mocp_info("File")
         metadata['xesam:title'] = self.get_mocp_info("SongTitle")
         metadata['xesam:artist'] = self.get_mocp_info("Artist")
@@ -372,8 +372,8 @@ class Mocp(dbus.service.Object):
         self.mocp_cmd(['--volume', str(volume)])
 
     def get_Position(self):
-        print(int(self.get_mocp_info('CurrentSec', 0))*1000000)
-        return int(self.get_mocp_info('CurrentSec', 0))*1000000
+        pos = dbus.Int64(int(self.get_mocp_info('CurrentSec', 0)) * 1000000)
+        return pos
 
     def get_CanGoNext(self):
         if not self.get_CanControl():
@@ -408,34 +408,26 @@ class Mocp(dbus.service.Object):
         # NOTE This could be a setting for the end user to change.
         return True
     
-    def mocp_update(self, interface, skipPosition=False):
+    def mocp_update(self, interface):
 
         if not self.update_mocp_info():
             return
-        
+
         getters = {}
-        
+
         if interface is not None:
             for key, (getter, _) in self.properties[interface].items():
                 getters[key] = getter() if callable(getter) else getter
-            
-            
-            print(getters.keys())
-            print(self.oldinfo.keys())
-            
+
             ret = copy.copy(getters)
             for key in getters.keys():
                 if key in self.oldinfo.keys():
                     if self.oldinfo[key] == getters[key]:
-                        print("{} == {}".format(self.oldinfo[key],getters[key]))
                         del ret[key]
-        
-            if skipPosition:
-                ret.pop('Position', None)
-        
+
             if len(ret.keys()) > 0:
                 self.PropertiesChanged(interface, ret, [])
-            
+
             self.oldinfo = copy.copy(getters)
         
     def update_mocp_info(self):
